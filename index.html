@@ -26,6 +26,16 @@ button {
   font-size:16px;
 }
 
+#seek {
+  width:100%;
+}
+
+.time {
+  text-align:center;
+  font-family: monospace;
+  margin-top:5px;
+}
+
 .track {
   border:1px solid #ddd;
   border-radius:10px;
@@ -62,14 +72,10 @@ input[type=range] {
   border-color:#e74c3c;
 }
 
-#seek {
-  width:100%;
-}
-
-.time {
-  text-align:center;
-  font-family: monospace;
-  margin-top:5px;
+.volDisplay {
+  width:55px;
+  font-size:12px;
+  text-align:right;
 }
 </style>
 </head>
@@ -99,32 +105,35 @@ const files = {
 };
 
 const names = {
-  ref: "Ref.Track",
-  sop: "Sopran",
+  ref: "Ref",
+  sop: "Sop",
   alt: "Alt",
-  ten: "Tenor",
+  ten: "Ten",
   bas: "Bass"
 };
 
-// ---------- AUDIO ENGINE ----------
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
 let buffers = {};
 let gainNodes = {};
 let sources = {};
+let state = {};
+
 let startTime = 0;
 let offset = 0;
 let playing = false;
-
-let state = {};
 let duration = 0;
 
 // ---------- UI ----------
 const container = document.getElementById("tracks");
 
 for (let k in files) {
+
+  // 🎯 Ref = 25%
+  const defaultVol = (k === "ref") ? 0.25 : 0.8;
+
   state[k] = {
-    volume: 0.8,
+    volume: defaultVol,
     mute: false
   };
 
@@ -135,7 +144,14 @@ for (let k in files) {
     <div class="row">
       <label>${names[k]}</label>
 
-      <input type="range" min="0" max="1" step="0.01" value="0.8" id="vol_${k}">
+      <input type="range"
+             min="0" max="1" step="0.01"
+             value="${defaultVol}"
+             id="vol_${k}">
+
+      <div class="volDisplay" id="disp_${k}">
+        ${Math.round(defaultVol * 100)}%
+      </div>
 
       <button class="muteBtn" id="mute_${k}">Mute</button>
     </div>
@@ -144,7 +160,7 @@ for (let k in files) {
   container.appendChild(div);
 }
 
-// ---------- LOAD AUDIO ----------
+// ---------- LOAD ----------
 async function loadAll() {
   for (let k in files) {
     const res = await fetch(files[k]);
@@ -155,7 +171,7 @@ async function loadAll() {
   duration = buffers.ref.duration;
 }
 
-// ---------- PLAY ENGINE ----------
+// ---------- PLAY ----------
 function playAll() {
   stopAll();
 
@@ -196,7 +212,7 @@ function pauseAll() {
   stopAll();
 }
 
-// ---------- APPLY MIX ----------
+// ---------- APPLY ----------
 function applyMix() {
   for (let k in gainNodes) {
     if (!gainNodes[k]) continue;
@@ -258,7 +274,13 @@ setTimeout(() => {
   for (let k in files) {
 
     document.getElementById("vol_" + k).oninput = (e) => {
-      state[k].volume = parseFloat(e.target.value);
+      const v = parseFloat(e.target.value);
+
+      state[k].volume = v;
+
+      document.getElementById("disp_" + k).innerText =
+        Math.round(v * 100) + "%";
+
       applyMix();
     };
 
