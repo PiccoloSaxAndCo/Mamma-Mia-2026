@@ -6,53 +6,28 @@
 <title>Mamma Mia 2026</title>
 
 <style>
-body {
-    font-family: Arial, sans-serif;
-    max-width: 850px;
-    margin: auto;
-    padding: 15px;
-}
+body { font-family: Arial; max-width: 800px; margin:auto; padding:15px; }
+h1 { text-align:center; }
 
-h1 { text-align: center; }
-
-.controls {
-    text-align: center;
-    margin-bottom: 10px;
-}
-
-button {
-    font-size: 16px;
-    padding: 10px;
-    margin: 5px;
-}
-
-#seek {
-    width: 100%;
-    margin: 10px 0 20px 0;
-}
+button { padding:10px; margin:5px; font-size:16px; }
 
 .track {
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    padding: 10px;
-    margin: 10px 0;
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:10px;
+  margin:10px 0;
 }
 
 .row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
 }
 
-label {
-    width: 90px;
-    font-weight: bold;
-}
+label { width:90px; font-weight:bold; }
 
-input[type=range] {
-    flex: 1;
-}
+input[type=range] { flex:1; }
 </style>
 </head>
 
@@ -60,165 +35,116 @@ input[type=range] {
 
 <h1>Mamma Mia 2026</h1>
 
-<div class="controls">
-    <button id="play">▶ Play</button>
-    <button id="pause">⏸ Pause</button>
-    <button id="stop">■ Stop</button>
+<div style="text-align:center;">
+  <button id="play">▶ Play</button>
+  <button id="pause">⏸ Pause</button>
+  <button id="stop">■ Stop</button>
 </div>
-
-<input type="range" id="seek" min="0" max="1000" value="0">
 
 <div id="tracks"></div>
 
 <script>
 const files = {
-    ref: "referenz.mp3",
-    sop: "sopran.mp3",
-    alt: "alt.mp3",
-    ten: "tenor.mp3",
-    bas: "bass.mp3"
+  ref: "referenz.mp3",
+  sop: "sopran.mp3",
+  alt: "alt.mp3",
+  ten: "tenor.mp3",
+  bas: "bass.mp3"
 };
 
 const names = {
-    ref: "Referenz",
-    sop: "Sopran",
-    alt: "Alt",
-    ten: "Tenor",
-    bas: "Bass"
+  ref: "Referenz",
+  sop: "Sopran",
+  alt: "Alt",
+  ten: "Tenor",
+  bas: "Bass"
 };
 
+// HTML audio elements (IMPORTANT for iOS stability)
+const audio = {};
+const gainNodes = {};
 let ctx;
-let buffers = {};
-let sources = {};
-let gains = {};
 
-let isPlaying = false;
-let startTime = 0;
-let pauseOffset = 0;
-let duration = 0;
+function initAudioGraph() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-// init audio context
-function init() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  for (let k in files) {
+    const a = document.getElementById(k);
+
+    const source = ctx.createMediaElementSource(a);
+    const gain = ctx.createGain();
+
+    source.connect(gain).connect(ctx.destination);
+
+    gain.gain.value = 0.8;
+
+    gainNodes[k] = gain;
+  }
 }
 
-// load file
-async function load(k) {
-    const res = await fetch(files[k]);
-    const arr = await res.arrayBuffer();
-    buffers[k] = await ctx.decodeAudioData(arr);
-}
-
-// UI
+// UI build
 const container = document.getElementById("tracks");
 
 for (let k in files) {
-    const div = document.createElement("div");
-    div.className = "track";
+  const div = document.createElement("div");
+  div.className = "track";
 
-    div.innerHTML = `
-        <div class="row">
-            <label>${names[k]}</label>
-            <input type="range" min="0" max="1" step="0.01" value="0.8" id="vol_${k}">
-        </div>
-    `;
+  div.innerHTML = `
+    <div class="row">
+      <label>${names[k]}</label>
+      <input type="range" min="0" max="1" step="0.01" value="0.8" id="vol_${k}">
+    </div>
 
-    container.appendChild(div);
+    <audio id="${k}" src="${files[k]}" preload="auto"></audio>
+  `;
+
+  container.appendChild(div);
 }
 
-// setup
-async function setup() {
-    init();
-
-    for (let k in files) {
-        await load(k);
-
-        const g = ctx.createGain();
-        g.gain.value = 0.8;
-        gains[k] = g;
-    }
-
-    duration = buffers.ref.duration;
+// volume controls
+function attachSliders() {
+  for (let k in files) {
+    document.getElementById("vol_" + k).oninput = (e) => {
+      gainNodes[k].gain.value = parseFloat(e.target.value);
+    };
+  }
 }
 
-// play
-function play() {
-    if (isPlaying) return;
+// sync play
+function playAll() {
+  initAudioGraph();
 
-    const offset = pauseOffset;
-
-    for (let k in buffers) {
-        const src = ctx.createBufferSource();
-        src.buffer = buffers[k];
-        src.connect(gains[k]).connect(ctx.destination);
-        src.start(0, offset);
-        sources[k] = src;
-    }
-
-    startTime = ctx.currentTime - offset;
-    isPlaying = true;
+  for (let k in files) {
+    const a = document.getElementById(k);
+    a.play();
+  }
 }
 
 // pause
-function pause() {
-    if (!isPlaying) return;
-
-    pauseOffset = ctx.currentTime - startTime;
-
-    for (let k in sources) {
-        try { sources[k].stop(); } catch(e) {}
-    }
-
-    isPlaying = false;
+function pauseAll() {
+  for (let k in files) {
+    document.getElementById(k).pause();
+  }
 }
 
 // stop
-function stop() {
-    pause();
-    pauseOffset = 0;
-    seek.value = 0;
+function stopAll() {
+  for (let k in files) {
+    const a = document.getElementById(k);
+    a.pause();
+    a.currentTime = 0;
+  }
 }
-
-// sliders
-function attach() {
-    for (let k in files) {
-        document.getElementById("vol_" + k).oninput = (e) => {
-            gains[k].gain.value = e.target.value;
-        };
-    }
-}
-
-// seek bar FIXED
-const seek = document.getElementById("seek");
-
-function updateSeek() {
-    if (!isPlaying) return;
-
-    const t = ctx.currentTime - startTime;
-    const percent = (t / duration) * 1000;
-
-    seek.value = percent;
-
-    requestAnimationFrame(updateSeek);
-}
-
-seek.oninput = () => {
-    const t = (seek.value / 1000) * duration;
-    pause();
-    pauseOffset = t;
-};
 
 // buttons
-document.getElementById("play").onclick = async () => {
-    init();
-    await setup();
-    attach();
-    play();
-    updateSeek();
+document.getElementById("play").onclick = () => {
+  initAudioGraph();
+  attachSliders();
+  playAll();
 };
 
-document.getElementById("pause").onclick = pause;
-document.getElementById("stop").onclick = stop;
+document.getElementById("pause").onclick = pauseAll;
+document.getElementById("stop").onclick = stopAll;
 </script>
 
 </body>
