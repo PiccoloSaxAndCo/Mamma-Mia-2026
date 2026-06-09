@@ -36,6 +36,7 @@ button {
   font-family: monospace;
 }
 
+/* 🔧 FIX: keine Umbrüche mehr */
 .track {
   border:1px solid #ddd;
   border-radius:10px;
@@ -43,39 +44,44 @@ button {
   margin:10px 0;
 }
 
-.track.active {
-  border-color:#4caf50;
-  background:#f4fff4;
-}
-
 .row {
   display:flex;
   align-items:center;
-  gap:10px;
-  flex-wrap:wrap;
+  gap:8px;
+  flex-wrap:nowrap; /* IMPORTANT FIX */
 }
 
 label {
-  width:90px;
+  width:80px;
   font-weight:bold;
+  font-size:14px;
 }
 
+/* Slider kompakter */
 input[type=range] {
   flex:1;
+  min-width:80px;
 }
 
+/* Buttons kompakt + fix gleiche Höhe */
 .smallbtn {
-  padding:6px 8px;
-  font-size:12px;
+  padding:5px 6px;
+  font-size:11px;
   border-radius:5px;
   border:1px solid #ccc;
-  cursor:pointer;
+  white-space:nowrap;
 }
 
 .smallbtn.active {
   background:#4caf50;
   color:white;
   border-color:#4caf50;
+}
+
+/* Mobile extra kompakt */
+@media (max-width: 500px) {
+  label { width:65px; font-size:12px; }
+  .smallbtn { font-size:10px; padding:4px 5px; }
 }
 </style>
 </head>
@@ -105,22 +111,21 @@ const files = {
 };
 
 const names = {
-  ref: "Referenz",
-  sop: "Sopran",
+  ref: "Ref",
+  sop: "Sop",
   alt: "Alt",
-  ten: "Tenor",
+  ten: "Ten",
   bas: "Bass"
 };
 
 let audios = {};
-let duration = 0;
-
 let solo = {};
 let mute = {};
-
-const container = document.getElementById("tracks");
+let duration = 0;
 
 // UI build
+const container = document.getElementById("tracks");
+
 for (let k in files) {
   solo[k] = false;
   mute[k] = false;
@@ -135,8 +140,8 @@ for (let k in files) {
 
       <input type="range" min="0" max="1" step="0.01" value="0.8" id="vol_${k}">
 
-      <button class="smallbtn" id="mute_${k}">Mute</button>
-      <button class="smallbtn" id="solo_${k}">Solo</button>
+      <button class="smallbtn" id="mute_${k}">M</button>
+      <button class="smallbtn" id="solo_${k}">S</button>
     </div>
 
     <audio id="${k}" src="${files[k]}" preload="auto"></audio>
@@ -154,26 +159,20 @@ function init() {
   duration = audios.ref.duration || 0;
 }
 
-// volume logic
+// 🔧 FIX: Lautstärke robust
 function applyMix() {
   const anySolo = Object.values(solo).some(v => v);
 
   for (let k in audios) {
-    const a = audios[k];
-
-    let vol = document.getElementById("vol_" + k).value;
+    let vol = parseFloat(document.getElementById("vol_" + k).value);
 
     if (mute[k]) vol = 0;
     if (anySolo && !solo[k]) vol = 0;
 
-    a.volume = vol;
+    audios[k].volume = vol;
 
-    // UI highlight
-    const el = document.getElementById("track_" + k);
-    const soloBtn = document.getElementById("solo_" + k);
-
-    soloBtn.classList.toggle("active", solo[k]);
-    el.classList.toggle("active", anySolo && solo[k]);
+    // UI
+    document.getElementById("solo_" + k).classList.toggle("active", solo[k]);
   }
 }
 
@@ -207,15 +206,14 @@ function stopAll() {
   }
 
   document.getElementById("seek").value = 0;
-  document.getElementById("time").innerText = "0:00 / " + format(duration);
+  document.getElementById("time").innerText = "0:00 / 0:00";
 }
 
-// time format
-function format(s) {
-  if (!s) return "0:00";
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60).toString().padStart(2, "0");
-  return `${m}:${sec}`;
+// format
+function format(t) {
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60).toString().padStart(2,"0");
+  return `${m}:${s}`;
 }
 
 // UI update
@@ -245,12 +243,12 @@ document.getElementById("seek").oninput = (e) => {
   }
 };
 
-// controls
+// buttons
 document.getElementById("play").onclick = playAll;
 document.getElementById("pause").onclick = pauseAll;
 document.getElementById("stop").onclick = stopAll;
 
-// attach events after build
+// events
 setTimeout(() => {
   for (let k in files) {
 
@@ -266,7 +264,7 @@ setTimeout(() => {
       applyMix();
     };
   }
-}, 300);
+}, 200);
 </script>
 
 </body>
