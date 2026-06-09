@@ -43,19 +43,14 @@ button {
   margin:10px 0;
 }
 
-.track.active {
-  border-color:#4caf50;
-  background:#f3fff3;
-}
-
 .row {
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:10px;
 }
 
 label {
-  width:80px;
+  width:90px;
   font-weight:bold;
 }
 
@@ -63,18 +58,18 @@ input[type=range] {
   flex:1;
 }
 
-.smallbtn {
-  padding:5px 7px;
+.muteBtn {
+  padding:5px 8px;
   font-size:12px;
   border-radius:5px;
   border:1px solid #ccc;
   cursor:pointer;
 }
 
-.smallbtn.active {
-  background:#4caf50;
+.muteBtn.active {
+  background:#e74c3c;
   color:white;
-  border-color:#4caf50;
+  border-color:#e74c3c;
 }
 </style>
 </head>
@@ -112,35 +107,22 @@ const names = {
 };
 
 let audio = {};
-let state = {
-  volume: {},
-  mute: {},
-  solo: {}
-};
-
 let duration = 0;
 let isPlaying = false;
 
-// ---------- UI BUILD ----------
+// ---------- BUILD UI ----------
 const container = document.getElementById("tracks");
 
 for (let k in files) {
-  state.volume[k] = 0.8;
-  state.mute[k] = false;
-  state.solo[k] = false;
-
   const div = document.createElement("div");
   div.className = "track";
-  div.id = "track_" + k;
-
   div.innerHTML = `
     <div class="row">
       <label>${names[k]}</label>
 
       <input type="range" min="0" max="1" step="0.01" value="0.8" id="vol_${k}">
 
-      <button class="smallbtn" id="mute_${k}">M</button>
-      <button class="smallbtn" id="solo_${k}">S</button>
+      <button class="muteBtn" id="mute_${k}">Mute</button>
     </div>
 
     <audio id="${k}" src="${files[k]}" preload="auto"></audio>
@@ -158,31 +140,21 @@ function init() {
   duration = audio.ref.duration || 0;
 }
 
-// ---------- AUDIO ENGINE (WICHTIG!) ----------
-function applyAudioState() {
-  const anySolo = Object.values(state.solo).some(v => v);
-
+// ---------- APPLY AUDIO ----------
+function applyAudio() {
   for (let k in audio) {
-    let vol = state.volume[k];
 
-    if (state.mute[k]) vol = 0;
-    if (anySolo && !state.solo[k]) vol = 0;
+    const vol = parseFloat(document.getElementById("vol_" + k).value);
+    const mute = document.getElementById("mute_" + k).classList.contains("active");
 
-    audio[k].volume = vol;
-
-    // UI highlight
-    document.getElementById("track_" + k)
-      .classList.toggle("active", anySolo && state.solo[k]);
-
-    document.getElementById("solo_" + k)
-      .classList.toggle("active", state.solo[k]);
+    audio[k].volume = mute ? 0 : vol;
 
     document.getElementById("mute_" + k)
-      .classList.toggle("active", state.mute[k]);
+      .classList.toggle("active", mute);
   }
 }
 
-// ---------- PLAYBACK ----------
+// ---------- PLAY ----------
 function playAll() {
   init();
 
@@ -197,6 +169,7 @@ function playAll() {
   updateUI();
 }
 
+// ---------- PAUSE ----------
 function pauseAll() {
   for (let k in audio) {
     audio[k].pause();
@@ -204,6 +177,7 @@ function pauseAll() {
   isPlaying = false;
 }
 
+// ---------- STOP ----------
 function stopAll() {
   pauseAll();
 
@@ -215,13 +189,14 @@ function stopAll() {
   document.getElementById("time").innerText = "0:00 / 0:00";
 }
 
-// ---------- UI UPDATE ----------
+// ---------- FORMAT ----------
 function format(t) {
   const m = Math.floor(t / 60);
   const s = Math.floor(t % 60).toString().padStart(2,"0");
   return `${m}:${s}`;
 }
 
+// ---------- UI LOOP ----------
 function updateUI() {
   if (!isPlaying) return;
 
@@ -237,7 +212,7 @@ function updateUI() {
       format(t) + " / " + format(ref.duration);
   }
 
-  applyAudioState();
+  applyAudio();
 
   requestAnimationFrame(updateUI);
 }
@@ -256,23 +231,14 @@ document.getElementById("play").onclick = playAll;
 document.getElementById("pause").onclick = pauseAll;
 document.getElementById("stop").onclick = stopAll;
 
-// ---------- CONTROL BINDING ----------
+// ---------- MUTE TOGGLE ----------
 setTimeout(() => {
   for (let k in files) {
+    document.getElementById("vol_" + k).oninput = applyAudio;
 
-    document.getElementById("vol_" + k).oninput = (e) => {
-      state.volume[k] = parseFloat(e.target.value);
-      applyAudioState();
-    };
-
-    document.getElementById("mute_" + k).onclick = () => {
-      state.mute[k] = !state.mute[k];
-      applyAudioState();
-    };
-
-    document.getElementById("solo_" + k).onclick = () => {
-      state.solo[k] = !state.solo[k];
-      applyAudioState();
+    document.getElementById("mute_" + k).onclick = (e) => {
+      e.target.classList.toggle("active");
+      applyAudio();
     };
   }
 }, 200);
