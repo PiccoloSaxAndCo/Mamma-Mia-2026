@@ -32,11 +32,10 @@ button {
 
 .time {
   text-align:center;
-  margin-top:5px;
   font-family: monospace;
+  margin-top:5px;
 }
 
-/* 🔧 FIX: keine Umbrüche mehr */
 .track {
   border:1px solid #ddd;
   border-radius:10px;
@@ -44,44 +43,38 @@ button {
   margin:10px 0;
 }
 
+.track.active {
+  border-color:#4caf50;
+  background:#f3fff3;
+}
+
 .row {
   display:flex;
   align-items:center;
   gap:8px;
-  flex-wrap:nowrap; /* IMPORTANT FIX */
 }
 
 label {
   width:80px;
   font-weight:bold;
-  font-size:14px;
 }
 
-/* Slider kompakter */
 input[type=range] {
   flex:1;
-  min-width:80px;
 }
 
-/* Buttons kompakt + fix gleiche Höhe */
 .smallbtn {
-  padding:5px 6px;
-  font-size:11px;
+  padding:5px 7px;
+  font-size:12px;
   border-radius:5px;
   border:1px solid #ccc;
-  white-space:nowrap;
+  cursor:pointer;
 }
 
 .smallbtn.active {
   background:#4caf50;
   color:white;
   border-color:#4caf50;
-}
-
-/* Mobile extra kompakt */
-@media (max-width: 500px) {
-  label { width:65px; font-size:12px; }
-  .smallbtn { font-size:10px; padding:4px 5px; }
 }
 </style>
 </head>
@@ -118,17 +111,23 @@ const names = {
   bas: "Bass"
 };
 
-let audios = {};
-let solo = {};
-let mute = {};
-let duration = 0;
+let audio = {};
+let state = {
+  volume: {},
+  mute: {},
+  solo: {}
+};
 
-// UI build
+let duration = 0;
+let isPlaying = false;
+
+// ---------- UI BUILD ----------
 const container = document.getElementById("tracks");
 
 for (let k in files) {
-  solo[k] = false;
-  mute[k] = false;
+  state.volume[k] = 0.8;
+  state.mute[k] = false;
+  state.solo[k] = false;
 
   const div = document.createElement("div");
   div.className = "track";
@@ -150,118 +149,130 @@ for (let k in files) {
   container.appendChild(div);
 }
 
-// init
+// ---------- INIT ----------
 function init() {
   for (let k in files) {
-    audios[k] = document.getElementById(k);
+    audio[k] = document.getElementById(k);
   }
 
-  duration = audios.ref.duration || 0;
+  duration = audio.ref.duration || 0;
 }
 
-// 🔧 FIX: Lautstärke robust
-function applyMix() {
-  const anySolo = Object.values(solo).some(v => v);
+// ---------- AUDIO ENGINE (WICHTIG!) ----------
+function applyAudioState() {
+  const anySolo = Object.values(state.solo).some(v => v);
 
-  for (let k in audios) {
-    let vol = parseFloat(document.getElementById("vol_" + k).value);
+  for (let k in audio) {
+    let vol = state.volume[k];
 
-    if (mute[k]) vol = 0;
-    if (anySolo && !solo[k]) vol = 0;
+    if (state.mute[k]) vol = 0;
+    if (anySolo && !state.solo[k]) vol = 0;
 
-    audios[k].volume = vol;
+    audio[k].volume = vol;
 
-    // UI
-    document.getElementById("solo_" + k).classList.toggle("active", solo[k]);
+    // UI highlight
+    document.getElementById("track_" + k)
+      .classList.toggle("active", anySolo && state.solo[k]);
+
+    document.getElementById("solo_" + k)
+      .classList.toggle("active", state.solo[k]);
+
+    document.getElementById("mute_" + k)
+      .classList.toggle("active", state.mute[k]);
   }
 }
 
-// play
+// ---------- PLAYBACK ----------
 function playAll() {
   init();
 
-  const t = audios.ref.currentTime || 0;
+  const t = audio.ref.currentTime || 0;
 
-  for (let k in audios) {
-    audios[k].currentTime = t;
-    audios[k].play();
+  for (let k in audio) {
+    audio[k].currentTime = t;
+    audio[k].play();
   }
 
+  isPlaying = true;
   updateUI();
 }
 
-// pause
 function pauseAll() {
-  for (let k in audios) {
-    audios[k].pause();
+  for (let k in audio) {
+    audio[k].pause();
   }
+  isPlaying = false;
 }
 
-// stop
 function stopAll() {
   pauseAll();
 
-  for (let k in audios) {
-    audios[k].currentTime = 0;
+  for (let k in audio) {
+    audio[k].currentTime = 0;
   }
 
   document.getElementById("seek").value = 0;
   document.getElementById("time").innerText = "0:00 / 0:00";
 }
 
-// format
+// ---------- UI UPDATE ----------
 function format(t) {
   const m = Math.floor(t / 60);
   const s = Math.floor(t % 60).toString().padStart(2,"0");
   return `${m}:${s}`;
 }
 
-// UI update
 function updateUI() {
-  const ref = audios.ref;
+  if (!isPlaying) return;
 
-  if (!ref || !ref.duration) return;
+  const ref = audio.ref;
 
-  const t = ref.currentTime;
+  if (ref && ref.duration) {
+    const t = ref.currentTime;
 
-  document.getElementById("seek").value = (t / ref.duration) * 1000;
+    document.getElementById("seek").value =
+      (t / ref.duration) * 1000;
 
-  document.getElementById("time").innerText =
-    format(t) + " / " + format(ref.duration);
+    document.getElementById("time").innerText =
+      format(t) + " / " + format(ref.duration);
+  }
 
-  applyMix();
+  applyAudioState();
 
   requestAnimationFrame(updateUI);
 }
 
-// seek
+// ---------- SEEK ----------
 document.getElementById("seek").oninput = (e) => {
-  const t = (e.target.value / 1000) * audios.ref.duration;
+  const t = (e.target.value / 1000) * audio.ref.duration;
 
-  for (let k in audios) {
-    audios[k].currentTime = t;
+  for (let k in audio) {
+    audio[k].currentTime = t;
   }
 };
 
-// buttons
+// ---------- EVENTS ----------
 document.getElementById("play").onclick = playAll;
 document.getElementById("pause").onclick = pauseAll;
 document.getElementById("stop").onclick = stopAll;
 
-// events
+// ---------- CONTROL BINDING ----------
 setTimeout(() => {
   for (let k in files) {
 
-    document.getElementById("vol_" + k).oninput = applyMix;
+    document.getElementById("vol_" + k).oninput = (e) => {
+      state.volume[k] = parseFloat(e.target.value);
+      applyAudioState();
+    };
 
     document.getElementById("mute_" + k).onclick = () => {
-      mute[k] = !mute[k];
-      applyMix();
+      state.mute[k] = !state.mute[k];
+      applyAudioState();
     };
 
     document.getElementById("solo_" + k).onclick = () => {
-      solo[k] = !solo[k];
-      applyMix();
+      state.solo[k] = !state.solo[k];
+      applyAudioState();
     };
   }
 }, 200);
