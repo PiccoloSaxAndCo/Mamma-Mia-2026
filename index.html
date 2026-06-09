@@ -36,12 +36,25 @@ button {
   margin-top:5px;
 }
 
+/* Base track */
 .track {
   border:1px solid #ddd;
   border-radius:10px;
   padding:10px;
   margin:10px 0;
 }
+
+/* Reference highlight */
+.track.ref {
+  background:#FBE9E7;
+  border-color:#F5C2B8;
+}
+
+/* Color coding */
+.track.sop { background:#E3F2FD; }  /* blue */
+.track.alt { background:#E8F5E9; }  /* green */
+.track.ten { background:#FFF9C4; }  /* yellow */
+.track.bas { background:#F5F5F5; }  /* grey */
 
 .row {
   display:flex;
@@ -117,19 +130,18 @@ const ctx = new (window.AudioContext || window.webkitAudioContext)();
 let buffers = {};
 let gainNodes = {};
 let sources = {};
-let state = {};
 
+let state = {};
 let startTime = 0;
 let offset = 0;
 let playing = false;
 let duration = 0;
 
-// ---------- UI ----------
+// ---------- UI BUILD ----------
 const container = document.getElementById("tracks");
 
 for (let k in files) {
 
-  // 🎯 Ref = 25%
   const defaultVol = (k === "ref") ? 0.25 : 0.8;
 
   state[k] = {
@@ -138,7 +150,12 @@ for (let k in files) {
   };
 
   const div = document.createElement("div");
-  div.className = "track";
+
+  // 🎨 class assignment
+  let cls = "track " + k;
+  if (k === "ref") cls += " ref";
+
+  div.className = cls;
 
   div.innerHTML = `
     <div class="row">
@@ -160,7 +177,7 @@ for (let k in files) {
   container.appendChild(div);
 }
 
-// ---------- LOAD ----------
+// ---------- LOAD AUDIO ----------
 async function loadAll() {
   for (let k in files) {
     const res = await fetch(files[k]);
@@ -212,17 +229,16 @@ function pauseAll() {
   stopAll();
 }
 
-// ---------- APPLY ----------
+// ---------- APPLY MIX ----------
 function applyMix() {
   for (let k in gainNodes) {
     if (!gainNodes[k]) continue;
-
     gainNodes[k].gain.value =
       state[k].mute ? 0 : state[k].volume;
   }
 }
 
-// ---------- UI UPDATE ----------
+// ---------- UI LOOP ----------
 function updateUI() {
   if (!playing) return;
 
@@ -248,12 +264,10 @@ function format(t) {
 document.getElementById("seek").oninput = (e) => {
   offset = (e.target.value / 1000) * duration;
 
-  if (playing) {
-    playAll();
-  }
+  if (playing) playAll();
 };
 
-// ---------- EVENTS ----------
+// ---------- CONTROLS ----------
 document.getElementById("play").onclick = async () => {
   await ctx.resume();
   await loadAll();
@@ -269,7 +283,7 @@ document.getElementById("stop").onclick = () => {
   document.getElementById("time").innerText = "0:00 / 0:00";
 };
 
-// ---------- CONTROLS ----------
+// ---------- INPUT EVENTS ----------
 setTimeout(() => {
   for (let k in files) {
 
