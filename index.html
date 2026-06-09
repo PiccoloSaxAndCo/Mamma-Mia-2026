@@ -6,28 +6,53 @@
 <title>Mamma Mia 2026</title>
 
 <style>
-body { font-family: Arial; max-width: 800px; margin:auto; padding:15px; }
-h1 { text-align:center; }
+body {
+  font-family: Arial;
+  max-width: 850px;
+  margin: auto;
+  padding: 15px;
+}
 
-button { padding:10px; margin:5px; font-size:16px; }
+h1 { text-align: center; }
+
+.controls {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+button {
+  padding: 10px;
+  margin: 5px;
+  font-size: 16px;
+}
+
+#seek {
+  width: 100%;
+  margin: 10px 0 20px 0;
+}
 
 .track {
-  border:1px solid #ddd;
-  border-radius:10px;
-  padding:10px;
-  margin:10px 0;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0;
 }
 
 .row {
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-wrap:wrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-label { width:90px; font-weight:bold; }
+label {
+  width: 90px;
+  font-weight: bold;
+}
 
-input[type=range] { flex:1; }
+input[type=range] {
+  flex: 1;
+}
 </style>
 </head>
 
@@ -35,11 +60,13 @@ input[type=range] { flex:1; }
 
 <h1>Mamma Mia 2026</h1>
 
-<div style="text-align:center;">
+<div class="controls">
   <button id="play">▶ Play</button>
   <button id="pause">⏸ Pause</button>
   <button id="stop">■ Stop</button>
 </div>
+
+<input type="range" id="seek" min="0" max="1000" value="0">
 
 <div id="tracks"></div>
 
@@ -60,12 +87,17 @@ const names = {
   bas: "Bass"
 };
 
-// HTML audio elements (IMPORTANT for iOS stability)
-const audio = {};
-const gainNodes = {};
+let audios = {};
+let gains = {};
 let ctx;
 
-function initAudioGraph() {
+let isPlaying = false;
+let startTime = 0;
+let pauseOffset = 0;
+let duration = 0;
+
+// init audio graph
+function init() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
 
   for (let k in files) {
@@ -78,8 +110,11 @@ function initAudioGraph() {
 
     gain.gain.value = 0.8;
 
-    gainNodes[k] = gain;
+    gains[k] = gain;
+    audios[k] = a;
   }
+
+  duration = audios.ref.duration || 1;
 }
 
 // UI build
@@ -101,44 +136,83 @@ for (let k in files) {
   container.appendChild(div);
 }
 
-// volume controls
+// sliders
 function attachSliders() {
   for (let k in files) {
     document.getElementById("vol_" + k).oninput = (e) => {
-      gainNodes[k].gain.value = parseFloat(e.target.value);
+      gains[k].gain.value = parseFloat(e.target.value);
     };
   }
 }
 
-// sync play
+// play
 function playAll() {
-  initAudioGraph();
+  init();
 
-  for (let k in files) {
-    const a = document.getElementById(k);
-    a.play();
+  const offset = pauseOffset;
+
+  for (let k in audios) {
+    audios[k].currentTime = offset;
+    audios[k].play();
   }
+
+  startTime = Date.now() / 1000 - offset;
+  isPlaying = true;
+
+  updateSeek();
 }
 
 // pause
 function pauseAll() {
-  for (let k in files) {
-    document.getElementById(k).pause();
+  for (let k in audios) {
+    audios[k].pause();
   }
+
+  pauseOffset = getTime();
+  isPlaying = false;
 }
 
 // stop
 function stopAll() {
-  for (let k in files) {
-    const a = document.getElementById(k);
-    a.pause();
-    a.currentTime = 0;
+  pauseAll();
+
+  pauseOffset = 0;
+
+  for (let k in audios) {
+    audios[k].currentTime = 0;
   }
+
+  document.getElementById("seek").value = 0;
 }
+
+// time
+function getTime() {
+  return Date.now() / 1000 - startTime;
+}
+
+// progress FIX
+function updateSeek() {
+  if (!isPlaying) return;
+
+  const t = getTime();
+  const percent = (t / duration) * 1000;
+
+  document.getElementById("seek").value = percent;
+
+  requestAnimationFrame(updateSeek);
+}
+
+// seek
+document.getElementById("seek").oninput = (e) => {
+  const t = (e.target.value / 1000) * duration;
+
+  pauseAll();
+  pauseOffset = t;
+};
 
 // buttons
 document.getElementById("play").onclick = () => {
-  initAudioGraph();
+  init();
   attachSliders();
   playAll();
 };
