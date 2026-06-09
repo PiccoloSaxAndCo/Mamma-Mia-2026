@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mamma Mia 2026</title>
+<title>Mamma Mia 2026 PRO</title>
 
 <style>
 body {
@@ -24,16 +24,6 @@ button {
   padding:10px;
   margin:5px;
   font-size:16px;
-}
-
-#seek {
-  width:100%;
-}
-
-.time {
-  text-align:center;
-  font-family: monospace;
-  margin-top:5px;
 }
 
 .track {
@@ -71,12 +61,22 @@ input[type=range] {
   color:white;
   border-color:#e74c3c;
 }
+
+#seek {
+  width:100%;
+}
+
+.time {
+  text-align:center;
+  font-family: monospace;
+  margin-top:5px;
+}
 </style>
 </head>
 
 <body>
 
-<h1>Mamma Mia 2026</h1>
+<h1>Mamma Mia 2026 PRO</h1>
 
 <div class="controls">
   <button id="play">▶ Play</button>
@@ -106,16 +106,31 @@ const names = {
   bas: "Bass"
 };
 
-let audio = {};
-let duration = 0;
-let isPlaying = false;
+// ---------- AUDIO ENGINE ----------
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-// ---------- BUILD UI ----------
+let buffers = {};
+let gainNodes = {};
+let sources = {};
+let startTime = 0;
+let offset = 0;
+let playing = false;
+
+let state = {};
+let duration = 0;
+
+// ---------- UI ----------
 const container = document.getElementById("tracks");
 
 for (let k in files) {
+  state[k] = {
+    volume: 0.8,
+    mute: false
+  };
+
   const div = document.createElement("div");
   div.className = "track";
+
   div.innerHTML = `
     <div class="row">
       <label>${names[k]}</label>
@@ -124,69 +139,86 @@ for (let k in files) {
 
       <button class="muteBtn" id="mute_${k}">Mute</button>
     </div>
-
-    <audio id="${k}" src="${files[k]}" preload="auto"></audio>
   `;
 
   container.appendChild(div);
 }
 
-// ---------- INIT ----------
-function init() {
+// ---------- LOAD AUDIO ----------
+async function loadAll() {
   for (let k in files) {
-    audio[k] = document.getElementById(k);
+    const res = await fetch(files[k]);
+    const arr = await res.arrayBuffer();
+    buffers[k] = await ctx.decodeAudioData(arr);
   }
 
-  duration = audio.ref.duration || 0;
+  duration = buffers.ref.duration;
 }
 
-// ---------- APPLY AUDIO ----------
-function applyAudio() {
-  for (let k in audio) {
-
-    const vol = parseFloat(document.getElementById("vol_" + k).value);
-    const mute = document.getElementById("mute_" + k).classList.contains("active");
-
-    audio[k].volume = mute ? 0 : vol;
-
-    document.getElementById("mute_" + k)
-      .classList.toggle("active", mute);
-  }
-}
-
-// ---------- PLAY ----------
+// ---------- PLAY ENGINE ----------
 function playAll() {
-  init();
+  stopAll();
 
-  const t = audio.ref.currentTime || 0;
+  startTime = ctx.currentTime - offset;
 
-  for (let k in audio) {
-    audio[k].currentTime = t;
-    audio[k].play();
+  for (let k in buffers) {
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+
+    source.buffer = buffers[k];
+
+    gain.gain.value = state[k].mute ? 0 : state[k].volume;
+
+    source.connect(gain).connect(ctx.destination);
+
+    source.start(0, offset);
+
+    sources[k] = source;
+    gainNodes[k] = gain;
   }
 
-  isPlaying = true;
+  playing = true;
   updateUI();
-}
-
-// ---------- PAUSE ----------
-function pauseAll() {
-  for (let k in audio) {
-    audio[k].pause();
-  }
-  isPlaying = false;
 }
 
 // ---------- STOP ----------
 function stopAll() {
-  pauseAll();
-
-  for (let k in audio) {
-    audio[k].currentTime = 0;
+  for (let k in sources) {
+    try { sources[k].stop(); } catch(e) {}
   }
+  sources = {};
+  playing = false;
+}
 
-  document.getElementById("seek").value = 0;
-  document.getElementById("time").innerText = "0:00 / 0:00";
+// ---------- PAUSE ----------
+function pauseAll() {
+  offset = ctx.currentTime - startTime;
+  stopAll();
+}
+
+// ---------- APPLY MIX ----------
+function applyMix() {
+  for (let k in gainNodes) {
+    if (!gainNodes[k]) continue;
+
+    gainNodes[k].gain.value =
+      state[k].mute ? 0 : state[k].volume;
+  }
+}
+
+// ---------- UI UPDATE ----------
+function updateUI() {
+  if (!playing) return;
+
+  const t = ctx.currentTime - startTime;
+
+  document.getElementById("seek").value =
+    (t / duration) * 1000;
+
+  document.getElementById("time").innerText =
+    format(t) + " / " + format(duration);
+
+  requestAnimationFrame(updateUI);
 }
 
 // ---------- FORMAT ----------
@@ -196,52 +228,47 @@ function format(t) {
   return `${m}:${s}`;
 }
 
-// ---------- UI LOOP ----------
-function updateUI() {
-  if (!isPlaying) return;
-
-  const ref = audio.ref;
-
-  if (ref && ref.duration) {
-    const t = ref.currentTime;
-
-    document.getElementById("seek").value =
-      (t / ref.duration) * 1000;
-
-    document.getElementById("time").innerText =
-      format(t) + " / " + format(ref.duration);
-  }
-
-  applyAudio();
-
-  requestAnimationFrame(updateUI);
-}
-
 // ---------- SEEK ----------
 document.getElementById("seek").oninput = (e) => {
-  const t = (e.target.value / 1000) * audio.ref.duration;
+  offset = (e.target.value / 1000) * duration;
 
-  for (let k in audio) {
-    audio[k].currentTime = t;
+  if (playing) {
+    playAll();
   }
 };
 
 // ---------- EVENTS ----------
-document.getElementById("play").onclick = playAll;
-document.getElementById("pause").onclick = pauseAll;
-document.getElementById("stop").onclick = stopAll;
+document.getElementById("play").onclick = async () => {
+  await ctx.resume();
+  await loadAll();
+  playAll();
+};
 
-// ---------- MUTE TOGGLE ----------
+document.getElementById("pause").onclick = pauseAll;
+
+document.getElementById("stop").onclick = () => {
+  offset = 0;
+  stopAll();
+  document.getElementById("seek").value = 0;
+  document.getElementById("time").innerText = "0:00 / 0:00";
+};
+
+// ---------- CONTROLS ----------
 setTimeout(() => {
   for (let k in files) {
-    document.getElementById("vol_" + k).oninput = applyAudio;
+
+    document.getElementById("vol_" + k).oninput = (e) => {
+      state[k].volume = parseFloat(e.target.value);
+      applyMix();
+    };
 
     document.getElementById("mute_" + k).onclick = (e) => {
+      state[k].mute = !state[k].mute;
       e.target.classList.toggle("active");
-      applyAudio();
+      applyMix();
     };
   }
-}, 200);
+}, 300);
 </script>
 
 </body>
