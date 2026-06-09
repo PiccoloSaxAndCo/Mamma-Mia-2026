@@ -28,7 +28,12 @@ button {
 
 #seek {
   width:100%;
-  margin:10px 0 20px 0;
+}
+
+.time {
+  text-align:center;
+  margin-top:5px;
+  font-family: monospace;
 }
 
 .track {
@@ -38,15 +43,39 @@ button {
   margin:10px 0;
 }
 
+.track.active {
+  border-color:#4caf50;
+  background:#f4fff4;
+}
+
 .row {
   display:flex;
   align-items:center;
   gap:10px;
+  flex-wrap:wrap;
 }
 
 label {
   width:90px;
   font-weight:bold;
+}
+
+input[type=range] {
+  flex:1;
+}
+
+.smallbtn {
+  padding:6px 8px;
+  font-size:12px;
+  border-radius:5px;
+  border:1px solid #ccc;
+  cursor:pointer;
+}
+
+.smallbtn.active {
+  background:#4caf50;
+  color:white;
+  border-color:#4caf50;
 }
 </style>
 </head>
@@ -62,6 +91,7 @@ label {
 </div>
 
 <input type="range" id="seek" min="0" max="1000" value="0">
+<div class="time" id="time">0:00 / 0:00</div>
 
 <div id="tracks"></div>
 
@@ -83,20 +113,30 @@ const names = {
 };
 
 let audios = {};
-let duration = 1;
-let isPlaying = false;
+let duration = 0;
 
-// UI
+let solo = {};
+let mute = {};
+
 const container = document.getElementById("tracks");
 
+// UI build
 for (let k in files) {
+  solo[k] = false;
+  mute[k] = false;
+
   const div = document.createElement("div");
   div.className = "track";
+  div.id = "track_" + k;
 
   div.innerHTML = `
     <div class="row">
       <label>${names[k]}</label>
+
       <input type="range" min="0" max="1" step="0.01" value="0.8" id="vol_${k}">
+
+      <button class="smallbtn" id="mute_${k}">Mute</button>
+      <button class="smallbtn" id="solo_${k}">Solo</button>
     </div>
 
     <audio id="${k}" src="${files[k]}" preload="auto"></audio>
@@ -111,7 +151,30 @@ function init() {
     audios[k] = document.getElementById(k);
   }
 
-  duration = audios.ref.duration || 1;
+  duration = audios.ref.duration || 0;
+}
+
+// volume logic
+function applyMix() {
+  const anySolo = Object.values(solo).some(v => v);
+
+  for (let k in audios) {
+    const a = audios[k];
+
+    let vol = document.getElementById("vol_" + k).value;
+
+    if (mute[k]) vol = 0;
+    if (anySolo && !solo[k]) vol = 0;
+
+    a.volume = vol;
+
+    // UI highlight
+    const el = document.getElementById("track_" + k);
+    const soloBtn = document.getElementById("solo_" + k);
+
+    soloBtn.classList.toggle("active", solo[k]);
+    el.classList.toggle("active", anySolo && solo[k]);
+  }
 }
 
 // play
@@ -125,8 +188,7 @@ function playAll() {
     audios[k].play();
   }
 
-  isPlaying = true;
-  updateSeek();
+  updateUI();
 }
 
 // pause
@@ -134,7 +196,6 @@ function pauseAll() {
   for (let k in audios) {
     audios[k].pause();
   }
-  isPlaying = false;
 }
 
 // stop
@@ -146,20 +207,33 @@ function stopAll() {
   }
 
   document.getElementById("seek").value = 0;
+  document.getElementById("time").innerText = "0:00 / " + format(duration);
 }
 
-// progress (WICHTIG: basiert auf ref audio!)
-function updateSeek() {
-  if (!isPlaying) return;
+// time format
+function format(s) {
+  if (!s) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, "0");
+  return `${m}:${sec}`;
+}
 
+// UI update
+function updateUI() {
   const ref = audios.ref;
 
-  if (ref && ref.duration) {
-    const percent = (ref.currentTime / ref.duration) * 1000;
-    document.getElementById("seek").value = percent;
-  }
+  if (!ref || !ref.duration) return;
 
-  requestAnimationFrame(updateSeek);
+  const t = ref.currentTime;
+
+  document.getElementById("seek").value = (t / ref.duration) * 1000;
+
+  document.getElementById("time").innerText =
+    format(t) + " / " + format(ref.duration);
+
+  applyMix();
+
+  requestAnimationFrame(updateUI);
 }
 
 // seek
@@ -171,24 +245,28 @@ document.getElementById("seek").oninput = (e) => {
   }
 };
 
-// volume
-function attachVolume() {
-  for (let k in files) {
-    document.getElementById("vol_" + k).oninput = (e) => {
-      audios[k].volume = parseFloat(e.target.value);
-    };
-  }
-}
-
-// buttons
-document.getElementById("play").onclick = () => {
-  init();
-  attachVolume();
-  playAll();
-};
-
+// controls
+document.getElementById("play").onclick = playAll;
 document.getElementById("pause").onclick = pauseAll;
 document.getElementById("stop").onclick = stopAll;
+
+// attach events after build
+setTimeout(() => {
+  for (let k in files) {
+
+    document.getElementById("vol_" + k).oninput = applyMix;
+
+    document.getElementById("mute_" + k).onclick = () => {
+      mute[k] = !mute[k];
+      applyMix();
+    };
+
+    document.getElementById("solo_" + k).onclick = () => {
+      solo[k] = !solo[k];
+      applyMix();
+    };
+  }
+}, 300);
 </script>
 
 </body>
