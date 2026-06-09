@@ -13,45 +13,40 @@ body {
   padding: 15px;
 }
 
-h1 { text-align: center; }
+h1 { text-align:center; }
 
 .controls {
-  text-align: center;
-  margin-bottom: 10px;
+  text-align:center;
+  margin-bottom:10px;
 }
 
 button {
-  padding: 10px;
-  margin: 5px;
-  font-size: 16px;
+  padding:10px;
+  margin:5px;
+  font-size:16px;
 }
 
 #seek {
-  width: 100%;
-  margin: 10px 0 20px 0;
+  width:100%;
+  margin:10px 0 20px 0;
 }
 
 .track {
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  padding: 10px;
-  margin: 10px 0;
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:10px;
+  margin:10px 0;
 }
 
 .row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
 
 label {
-  width: 90px;
-  font-weight: bold;
-}
-
-input[type=range] {
-  flex: 1;
+  width:90px;
+  font-weight:bold;
 }
 </style>
 </head>
@@ -88,36 +83,10 @@ const names = {
 };
 
 let audios = {};
-let gains = {};
-let ctx;
-
+let duration = 1;
 let isPlaying = false;
-let startTime = 0;
-let pauseOffset = 0;
-let duration = 0;
 
-// init audio graph
-function init() {
-  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-  for (let k in files) {
-    const a = document.getElementById(k);
-
-    const source = ctx.createMediaElementSource(a);
-    const gain = ctx.createGain();
-
-    source.connect(gain).connect(ctx.destination);
-
-    gain.gain.value = 0.8;
-
-    gains[k] = gain;
-    audios[k] = a;
-  }
-
-  duration = audios.ref.duration || 1;
-}
-
-// UI build
+// UI
 const container = document.getElementById("tracks");
 
 for (let k in files) {
@@ -136,29 +105,27 @@ for (let k in files) {
   container.appendChild(div);
 }
 
-// sliders
-function attachSliders() {
+// init
+function init() {
   for (let k in files) {
-    document.getElementById("vol_" + k).oninput = (e) => {
-      gains[k].gain.value = parseFloat(e.target.value);
-    };
+    audios[k] = document.getElementById(k);
   }
+
+  duration = audios.ref.duration || 1;
 }
 
 // play
 function playAll() {
   init();
 
-  const offset = pauseOffset;
+  const t = audios.ref.currentTime || 0;
 
   for (let k in audios) {
-    audios[k].currentTime = offset;
+    audios[k].currentTime = t;
     audios[k].play();
   }
 
-  startTime = Date.now() / 1000 - offset;
   isPlaying = true;
-
   updateSeek();
 }
 
@@ -167,16 +134,12 @@ function pauseAll() {
   for (let k in audios) {
     audios[k].pause();
   }
-
-  pauseOffset = getTime();
   isPlaying = false;
 }
 
 // stop
 function stopAll() {
   pauseAll();
-
-  pauseOffset = 0;
 
   for (let k in audios) {
     audios[k].currentTime = 0;
@@ -185,35 +148,42 @@ function stopAll() {
   document.getElementById("seek").value = 0;
 }
 
-// time
-function getTime() {
-  return Date.now() / 1000 - startTime;
-}
-
-// progress FIX
+// progress (WICHTIG: basiert auf ref audio!)
 function updateSeek() {
   if (!isPlaying) return;
 
-  const t = getTime();
-  const percent = (t / duration) * 1000;
+  const ref = audios.ref;
 
-  document.getElementById("seek").value = percent;
+  if (ref && ref.duration) {
+    const percent = (ref.currentTime / ref.duration) * 1000;
+    document.getElementById("seek").value = percent;
+  }
 
   requestAnimationFrame(updateSeek);
 }
 
 // seek
 document.getElementById("seek").oninput = (e) => {
-  const t = (e.target.value / 1000) * duration;
+  const t = (e.target.value / 1000) * audios.ref.duration;
 
-  pauseAll();
-  pauseOffset = t;
+  for (let k in audios) {
+    audios[k].currentTime = t;
+  }
 };
+
+// volume
+function attachVolume() {
+  for (let k in files) {
+    document.getElementById("vol_" + k).oninput = (e) => {
+      audios[k].volume = parseFloat(e.target.value);
+    };
+  }
+}
 
 // buttons
 document.getElementById("play").onclick = () => {
   init();
-  attachSliders();
+  attachVolume();
   playAll();
 };
 
